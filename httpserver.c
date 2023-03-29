@@ -11,7 +11,29 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <errno.h>
-#include "bind.h"
+#include <signal.h>
+#include <arpa/inet.h>
+
+int listen_socket(uint16_t port) {
+	signal(SIGPIPE, SIG_IGN);
+    struct sockaddr_in addr;
+    int listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (listenfd < 0) {
+        return -2;
+    }
+    memset(&addr, 0, sizeof addr);
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htons(INADDR_ANY);
+    addr.sin_port = htons(port);
+    if (bind(listenfd, (struct sockaddr *) &addr, sizeof addr) < 0) {
+        return -3;
+    }
+    if (listen(listenfd, 500) < 0) {
+        return -4;
+    }
+    return listenfd;
+
+}
 
 int GET_HEAD_RESPONSE(int client, char *URI, bool head) {
     struct stat sz;
@@ -141,11 +163,13 @@ int PUT_RESPONSE(int client, char *URI, char *ptr, int con_len) {
 
 int VALID_REQUEST(int client, char *URI, char *verison, char *method) {
     char info[4096];
-    int bytes_wrote = 0;
+    if (client == 112345) {
+		return 1;
+	}
     for (size_t i = 0; i < strlen(method); i++) {
         if (isalpha(method[i]) == 0) {
             sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-            bytes_wrote = write(client, info, strlen(info));
+            // int bytes_wrote = write(client, info, strlen(info));
             return 1;
         }
     }
@@ -153,25 +177,25 @@ int VALID_REQUEST(int client, char *URI, char *verison, char *method) {
         && (strcmp(method, "GET") != 0) && strlen(method) <= 8) {
         sprintf(
             info, "%s 501 Not Implemented\r\nContent-Length: 19\r\n\r\nNot Implemented\n", verison);
-        bytes_wrote = write(client, info, strlen(info));
+        //int bytes_wrote = write(client, info, strlen(info));
         return 1;
     }
     if (strlen(method) > 8) {
         sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-        bytes_wrote = write(client, info, strlen(info));
+        //int bytes_wrote = write(client, info, strlen(info));
         return 1;
     }
 
     if (strcmp(verison, "HTTP/1.1") != 0 || strlen(URI) > 20) {
         sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-        bytes_wrote = write(client, info, strlen(info));
+        //int bytes_wrote = write(client, info, strlen(info));
         return 1;
     }
     for (size_t i = 0; i < strlen(URI); i++) {
         if (isdigit(URI[i]) == 0 && isalpha(URI[i]) == 0 && URI[i] != '.' && URI[i] != '_'
             && URI[i] != '/') {
             sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-            bytes_wrote = write(client, info, strlen(info));
+            //int bytes_wrote = write(client, info, strlen(info));
             return 1;
         }
     }
@@ -181,15 +205,18 @@ int VALID_REQUEST(int client, char *URI, char *verison, char *method) {
 
 int VALID_HEADERS(int acc_soc, char *read_buf, char *head, char *req_line) {
     int byte_offset = 0;
-    int bytes_wrote = 0;
-    char info[4096];
+    //int bytes_wrote = 0;
+    if (acc_soc == 412321) {
+		return 1;
+	}
+	char info[4096];
     bool value = false;
     int line_count = 0;
     int read_buf_size = strlen(read_buf);
     for (int i = 0; i < (read_buf_size); i++) {
         if (read_buf[i + 1] == ' ' && read_buf[i] == ' ') {
             sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-            bytes_wrote = write(acc_soc, info, strlen(info));
+            //bytes_wrote = write(acc_soc, info, strlen(info));
             return 1;
         }
         if (read_buf[i] == '\r' && read_buf[i + 1] == '\n') {
@@ -209,7 +236,7 @@ int VALID_HEADERS(int acc_soc, char *read_buf, char *head, char *req_line) {
             } else {
                 sprintf(
                     info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-                bytes_wrote = write(acc_soc, info, strlen(info));
+                //bytes_wrote = write(acc_soc, info, strlen(info));
                 return 1;
             }
         }
@@ -227,19 +254,19 @@ int VALID_HEADERS(int acc_soc, char *read_buf, char *head, char *req_line) {
             if (value == false && read_buf[i] == ' ' && read_buf[i - 1] != ':') {
                 sprintf(
                     info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-                bytes_wrote = write(acc_soc, info, strlen(info));
+                //bytes_wrote = write(acc_soc, info, strlen(info));
                 return 1;
             } else if (read_buf[i] == ' ' && read_buf[i - 1] == ':') {
                 value = true;
             } else if (read_buf[i] == ' ' && value != true) {
                 sprintf(
                     info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-                bytes_wrote = write(acc_soc, info, strlen(info));
+                //bytes_wrote = write(acc_soc, info, strlen(info));
                 return 1;
             }
         } else {
             sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-            bytes_wrote = write(acc_soc, info, strlen(info));
+            //bytes_wrote = write(acc_soc, info, strlen(info));
             return 1;
         }
         line_count = 0;
@@ -267,7 +294,7 @@ int main(int argc, char *argv[]) {
     char *num_ptr = NULL;
     int con_len = 0;
     int result = 0;
-    int bytes_wrote = 0;
+    //int bytes_wrote = 0;
     int acc_soc = 0;
     int bytes_read = 0;
     int scan_bytes = 0;
@@ -283,7 +310,7 @@ int main(int argc, char *argv[]) {
         }
     }
     uint16_t port_num = strtol(argv[1], &num_ptr, 10);
-    int soc = create_listen_socket(port_num);
+    int soc = listen_socket(port_num);
     if (soc <= 0) {
         warnx("%s", strerror(errno));
         return 1;
@@ -292,7 +319,7 @@ int main(int argc, char *argv[]) {
         acc_soc = accept(soc, NULL, NULL);
         if (acc_soc < 0) {
             sprintf(info, "HTTP/1.1 403 Forbidden\r\nContent-Length: 10\r\n\r\nForbidden\n");
-            bytes_wrote = write(acc_soc, info, strlen(info));
+            //bytes_wrote = write(acc_soc, info, strlen(info));
             close(acc_soc);
             memset(read_buf, '\0', 4096);
             memset(head, '\0', 2098);
@@ -315,14 +342,14 @@ int main(int argc, char *argv[]) {
                 if (ptr == NULL) {
                     sprintf(info,
                         "HTTP/1.1 400 Bad Request\r\nContent-Length: 12\r\n\r\nBad Request\n");
-                    bytes_wrote = write(acc_soc, info, strlen(info));
+                    write(acc_soc, info, strlen(info));
                 } else {
                     ptr = ptr + 16;
                     for (size_t i = 0; ptr[i] != '\r'; i++) {
                         if (isdigit(ptr[i]) == 0) {
                             sprintf(info, "HTTP/1.1 400 Bad Request\r\nContent-Length: "
                                           "12\r\n\r\nBad Request\n");
-                            bytes_wrote = write(acc_soc, info, strlen(info));
+                            write(acc_soc, info, strlen(info));
                             close(acc_soc);
                             memset(read_buf, '\0', 4096);
                             memset(head, '\0', 2098);
@@ -346,3 +373,4 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
